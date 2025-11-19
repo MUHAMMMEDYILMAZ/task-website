@@ -218,7 +218,7 @@ Provide:
           "X-Title": "DailyTaskAI",
         },
         body: JSON.stringify({
-          model: "google/gemma-7b-it",
+  model: "moonshotai/kimi-k2:free",
           messages: [
             {
               role: "user",
