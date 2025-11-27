@@ -1,3 +1,7 @@
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -38,23 +42,25 @@ Return a well-organized schedule with:
 - short explanation
 
 Return the result in the same language as the user’s hint.
-    `;
+`;
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "DailyTaskAI",
       },
       body: JSON.stringify({
-model: "mistralai/mistral-small-24b-instruct:free",
+model: "x-ai/grok-4.1-fast:free",
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      return NextResponse.json({ error: err }, { status: 500 });
+      const text = await response.text();
+      return NextResponse.json({ error: text }, { status: 500 });
     }
 
     const data = await response.json();
@@ -62,9 +68,9 @@ model: "mistralai/mistral-small-24b-instruct:free",
     return NextResponse.json({
       schedule: data.choices?.[0]?.message?.content || "No schedule generated.",
     });
-  } catch (err) {
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Server error while generating schedule." },
+      { error: `Server error: ${err}` },
       { status: 500 }
     );
   }

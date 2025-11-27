@@ -20,7 +20,9 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+
 import { format } from "date-fns";
+import { enUS } from "date-fns/locale";
 
 interface Task {
   id: string;
@@ -73,6 +75,7 @@ export default function Home() {
 
     await fetch("/api/tasks", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, description, dueAt }),
     });
 
@@ -87,6 +90,7 @@ export default function Home() {
   async function deleteTask(id: string) {
     await fetch("/api/tasks", {
       method: "DELETE",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
     fetchTasks();
@@ -96,6 +100,7 @@ export default function Home() {
   async function completeTask(id: string) {
     await fetch("/api/tasks", {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
 
@@ -112,6 +117,7 @@ export default function Home() {
 
     await fetch("/api/tasks", {
       method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: editId,
         title: editTitle,
@@ -129,12 +135,12 @@ export default function Home() {
 
   const filtered =
     filter === "all"
-      ? activeTasks
+      ? tasks
       : filter === "active"
       ? activeTasks
       : completedTasks;
 
-  /* AI: Generate smart schedule */
+  /* AI: Generate smart schedule (SERVER API) */
   async function generateSchedule() {
     try {
       setAiLoading(true);
@@ -142,58 +148,26 @@ export default function Home() {
       setAiMode("schedule");
       setAiText("");
 
-      const prompt = `
-The user may speak Arabic, English, or Turkish.
-Respond in the SAME language the user typed their hint.
-
-User daily description:
-"${aiHint || "No description"}"
-
-User tasks:
-${tasks
-  .map(
-    (t, i) =>
-      `${i + 1}) ${t.title} - Due: ${t.dueAt} - Description: ${
-        t.description || "none"
-      }`
-  )
-  .join("\n")}
-
-Provide:
-- Timeline
-- Priorities
-- Time blocks
-- Breaks
-- Explanations
-`;
-
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const res = await fetch("/api/ai/schedule", {
         method: "POST",
+        credentials: "include",
         headers: {
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "http://localhost:3000",
-          "X-Title": "DailyTaskAI",
         },
-       body: JSON.stringify({
-  model: "moonshotai/kimi-k2:free",
-  messages: [{ role: "user", content: prompt }],
-}),
-
+        body: JSON.stringify({
+          hint: aiHint,
+          tasks: tasks,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        const msg =
-          typeof data.error === "string"
-            ? data.error
-            : data.error?.message || "AI error";
-        setAiError(msg);
+        setAiError(data.error || "AI error");
         return;
       }
 
-      setAiText(data.choices?.[0]?.message?.content || "No schedule generated.");
+      setAiText(data.schedule || "No schedule generated.");
     } catch (err) {
       setAiError("AI connection failed.");
     } finally {
@@ -201,7 +175,7 @@ Provide:
     }
   }
 
-  /* AI: Suggestions */
+  /* AI: Suggestions (SERVER API) */
   async function getSuggestions() {
     try {
       setAiLoading(true);
@@ -209,37 +183,19 @@ Provide:
       setAiMode("suggest");
       setAiText("");
 
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "http://localhost:3000",
-          "X-Title": "DailyTaskAI",
-        },
-        body: JSON.stringify({
-  model: "moonshotai/kimi-k2:free",
-          messages: [
-            {
-              role: "user",
-              content: "Give me 6 useful daily tasks to improve life.",
-            },
-          ],
-        }),
+      const res = await fetch("/api/ai/suggestions", {
+        method: "GET",
+        credentials: "include",
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        const msg =
-          typeof data.error === "string"
-            ? data.error
-            : data.error?.message || "AI error";
-        setAiError(msg);
+        setAiError(data.error || "AI error");
         return;
       }
 
-      setAiText(data.choices?.[0]?.message?.content || "No suggestions.");
+      setAiText(data.suggestions || "No suggestions.");
     } catch (err) {
       setAiError("AI connection failed.");
     } finally {
@@ -253,7 +209,6 @@ Provide:
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-14 px-4">
-
       {/* MAIN CONTENT */}
       <div className="max-w-3xl mx-auto">
         {/* HEADER */}
@@ -308,7 +263,7 @@ Provide:
             className="flex-1"
             onClick={() => setFilter("all")}
           >
-            Tasks ({activeTasks.length})
+            Tasks ({tasks.length})
           </Button>
 
           <Button
@@ -349,7 +304,7 @@ Provide:
                     <p className="text-sm text-gray-600">{t.description}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Due: {format(new Date(t.dueAt), "PPpp")}
+                    Due: {format(new Date(t.dueAt), "PPpp", { locale: enUS })}
                   </p>
                 </div>
 
