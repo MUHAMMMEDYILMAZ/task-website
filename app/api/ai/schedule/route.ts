@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
-export const runtime = "nodejs";
+// ⚠️ لا تضع runtime=nodejs — يخرب خارج Vercel
+// export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
 You are an AI that creates a smart daily plan.
 User language may be: Arabic, English, or Turkish.
 
-User hint about his day:
+User hint:
 "${hint || "No hint"}"
 
 User tasks:
@@ -29,19 +30,17 @@ ${(tasks || [])
   .map(
     (t: any, i: number) =>
       `${i + 1}) ${t.title} - Due: ${t.dueAt} - Description: ${
-        t.description || "no description"
+        t.description || "none"
       }`
   )
   .join("\n")}
 
-Return a well-organized schedule with:
-- time ranges
+Return:
+- timeline
 - priorities
-- study / work blocks
-- break times
-- short explanation
-
-Return the result in the same language as the user’s hint.
+- work/study blocks
+- breaks
+- explanation
 `;
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -49,8 +48,8 @@ Return the result in the same language as the user’s hint.
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "DailyTaskAI",
+        "HTTP-Referer": "https://daily-tasks-ai.vercel.app",
+        "X-Title": "DailyTasksAI",
       },
       body: JSON.stringify({
 model: "x-ai/grok-4.1-fast:free",
@@ -58,16 +57,18 @@ model: "x-ai/grok-4.1-fast:free",
       }),
     });
 
+    const raw = await response.text();
+
     if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json({ error: text }, { status: 500 });
+      return NextResponse.json({ error: raw }, { status: 500 });
     }
 
-    const data = await response.json();
+    const data = JSON.parse(raw);
 
     return NextResponse.json({
       schedule: data.choices?.[0]?.message?.content || "No schedule generated.",
     });
+
   } catch (err: any) {
     return NextResponse.json(
       { error: `Server error: ${err}` },

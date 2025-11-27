@@ -1,9 +1,6 @@
-// Fix for Next.js 16 API Runtime issues
+// Fix Next.js 16 caching behavior
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
-export const runtime = "nodejs";
-export const preferredRegion = "auto";
-export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 
@@ -18,21 +15,10 @@ export async function GET() {
       );
     }
 
-    // Internet test
-    const test = await fetch("https://httpbin.org/get").catch(() => null);
-
-    if (!test || !test.ok) {
-      return NextResponse.json(
-        { error: "Server has no internet access." },
-        { status: 500 }
-      );
-    }
-
     const prompt = `
 Give 6 useful daily tasks.
 The user may speak Arabic, English, or Turkish.
-Return the list in one language only.
-If input is empty, return in English.
+Return in English if no language detected.
 `;
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -40,14 +26,15 @@ If input is empty, return in English.
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://daily-tasks-ai.vercel.app",
+        "X-Title": "DailyTasksAI",
       },
       body: JSON.stringify({
-        model: "x-ai/grok-4.1-fast:free",
+model: "x-ai/grok-4.1-fast:free",
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
-    // Raw logging for debugging
     const raw = await response.text();
 
     if (!response.ok) {
@@ -57,12 +44,12 @@ If input is empty, return in English.
     const data = JSON.parse(raw);
 
     return NextResponse.json({
-      suggestions: data.choices?.[0]?.message?.content || "No suggestions generated.",
+      suggestions:
+        data.choices?.[0]?.message?.content || "No suggestions generated.",
     });
-
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
-      { error: `Server error while generating suggestions: ${err}` },
+      { error: "AI connection failed." },
       { status: 500 }
     );
   }

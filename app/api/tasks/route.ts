@@ -1,94 +1,113 @@
-export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import clientPromise from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 
-/* =========================
-    GET — Get all tasks
-========================= */
 export async function GET() {
-  const tasks = await prisma.task.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-  return NextResponse.json(tasks);
+  const client = await clientPromise;
+  const db = client.db("taskproject");
+
+  const tasks = await db
+    .collection("tasks")
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  // تحويل `_id` → `id`
+  const mapped = tasks.map((t: any) => ({
+    id: t._id.toString(),
+    title: t.title,
+    description: t.description,
+    dueAt: t.dueAt,
+    isDone: t.isDone,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  }));
+
+  return NextResponse.json(mapped);
 }
 
-/* =========================
-    POST — Create task
-========================= */
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const task = await prisma.task.create({
-    data: {
-      title: body.title,
-      description: body.description,
-      dueAt: new Date(body.dueAt),
-      isDone: false,
-      updatedAt: null,
-    },
-  });
+  const client = await clientPromise;
+  const db = client.db("taskproject");
 
-  return NextResponse.json(task);
+  const task = {
+    title: body.title,
+    description: body.description || "",
+    dueAt: new Date(body.dueAt),
+    isDone: false,
+    createdAt: new Date(),
+    updatedAt: null,
+  };
+
+  const result = await db.collection("tasks").insertOne(task);
+
+  return NextResponse.json({
+    id: result.insertedId.toString(),
+    ...task,
+  });
 }
 
-/* =========================
-    PUT — Edit task
-========================= */
 export async function PUT(req: Request) {
   const body = await req.json();
 
   if (!body.id) {
-    return NextResponse.json({ error: "Missing task ID" }, { status: 400 });
+    return NextResponse.json({ error: "Missing ID" }, { status: 400 });
   }
 
-  const updated = await prisma.task.update({
-    where: { id: body.id },
-    data: {
-      title: body.title,
-      description: body.description,
-      dueAt: new Date(body.dueAt),
-      updatedAt: new Date(), // ⬅ تحديث تاريخ التعديل
-    },
-  });
+  const client = await clientPromise;
+  const db = client.db("taskproject");
 
-  return NextResponse.json(updated);
+  await db.collection("tasks").updateOne(
+    { _id: new ObjectId(body.id) },
+    {
+      $set: {
+        title: body.title,
+        description: body.description,
+        dueAt: new Date(body.dueAt),
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  return NextResponse.json({ ok: true });
 }
 
-/* =========================
-    PATCH — Complete task
-========================= */
 export async function PATCH(req: Request) {
   const { id } = await req.json();
 
   if (!id) {
-    return NextResponse.json({ error: "Missing task ID" }, { status: 400 });
+    return NextResponse.json({ error: "Missing ID" }, { status: 400 });
   }
 
-  const updated = await prisma.task.update({
-    where: { id },
-    data: {
-      isDone: true,
-      updatedAt: new Date(), // ⬅ نعتبرها لحظة اكتمال المهمة
-    },
-  });
+  const client = await clientPromise;
+  const db = client.db("taskproject");
 
-  return NextResponse.json(updated);
+  await db.collection("tasks").updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        isDone: true,
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  return NextResponse.json({ ok: true });
 }
 
-/* =========================
-    DELETE — Delete task
-========================= */
 export async function DELETE(req: Request) {
   const { id } = await req.json();
 
   if (!id) {
-    return NextResponse.json({ error: "Missing task ID" }, { status: 400 });
+    return NextResponse.json({ error: "Missing ID" }, { status: 400 });
   }
 
-  await prisma.task.delete({
-    where: { id },
-  });
+  const client = await clientPromise;
+  const db = client.db("taskproject");
 
-  return NextResponse.json({ message: "Task deleted" });
+  await db.collection("tasks").deleteOne({ _id: new ObjectId(id) });
+
+  return NextResponse.json({ ok: true });
 }
